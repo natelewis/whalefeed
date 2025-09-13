@@ -1,0 +1,40 @@
+{
+  "name": "whalefeed",
+  "version": "1.0.0",
+  "description": "Trade data ingestion from Polygon.io to QuestDB",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/commands/ingest.ts",
+    "ingest": "tsx src/commands/ingest.ts",
+    "backfill": "tsx src/commands/backfill.ts",
+    "reset": "tsx src/commands/reset.ts",
+    "install-deps": "npm install"
+  },
+  "keywords": [
+    "trading",
+    "data",
+    "polygon",
+    "questdb",
+    "websocket"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.2",
+    "chalk": "^4.1.2",
+    "dotenv": "^16.3.1",
+    "inquirer": "^8.2.6",
+    "node-cron": "^3.0.3",
+    "p-limit": "^7.1.1",
+    "ws": "^8.14.2"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^9.0.7",
+    "@types/node": "^20.10.0",
+    "@types/ws": "^8.5.10",
+    "tsx": "^4.6.0",
+    "typescript": "^5.3.2"
+  }
+}
