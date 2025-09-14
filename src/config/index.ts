@@ -9,6 +9,9 @@ export interface Config {
     wsUrl: string;
     minDataDelayMinutes: number;
     logRequests: boolean;
+    skipOptionTrades: boolean;
+    skipOptionQuotes: boolean;
+    optionContractsLimit: number;
   };
   questdb: {
     host: string;
@@ -41,6 +44,9 @@ export const config: Config = {
     wsUrl: 'wss://socket.polygon.io/stocks',
     minDataDelayMinutes: parseInt(process.env.POLYGON_MIN_DATA_DELAY_MINUTES || '0'),
     logRequests: process.env.POLYGON_LOG_REQUESTS === 'true',
+    skipOptionTrades: process.env.POLYGON_SKIP_OPTION_TRADES === 'true',
+    skipOptionQuotes: process.env.POLYGON_SKIP_OPTION_QUOTES === 'true',
+    optionContractsLimit: parseInt(process.env.POLYGON_OPTION_CONTRACTS_LIMIT || '1000'),
   },
   questdb: {
     host: process.env.QUESTDB_HOST || '127.0.0.1',

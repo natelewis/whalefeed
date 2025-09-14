@@ -155,7 +155,7 @@ export class DataIngestionService {
     }
 
     // Get missing aggregates
-    const aggregates = await this.polygonClient.getHistoricalAggregates(ticker, lastSync, endTime, 'minute', 5);
+    const aggregates = await this.polygonClient.getHistoricalAggregates(ticker, lastSync, endTime, 'minute', 1);
 
     if (aggregates.length > 0) {
       await this.insertAggregates(ticker, aggregates);
@@ -225,36 +225,60 @@ export class DataIngestionService {
   }
 
   private async insertStockTrade(trade: StockTrade): Promise<void> {
-    await db.query(`
-      INSERT INTO stock_trades (symbol, timestamp, price, size, conditions, exchange, tape, trade_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    `, [
-      trade.symbol,
-      trade.timestamp,
-      trade.price,
-      trade.size,
-      trade.conditions,
-      trade.exchange,
-      trade.tape,
-      trade.trade_id
-    ]);
+    try {
+      await db.query(
+        `
+        INSERT INTO stock_trades (symbol, timestamp, price, size, conditions, exchange, tape, trade_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `,
+        [
+          trade.symbol,
+          trade.timestamp,
+          trade.price,
+          trade.size,
+          trade.conditions,
+          trade.exchange,
+          trade.tape,
+          trade.trade_id,
+        ]
+      );
+    } catch (error) {
+      // Ignore unique constraint violations (duplicates)
+      if (error instanceof Error && error.message.includes('duplicate')) {
+        console.log(`Skipping duplicate stock trade: ${trade.symbol} at ${trade.timestamp}`);
+        return;
+      }
+      throw error;
+    }
   }
 
   private async insertStockAggregate(aggregate: StockAggregate): Promise<void> {
-    await db.query(`
-      INSERT INTO stock_aggregates (symbol, timestamp, open, high, low, close, volume, vwap, transaction_count)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-    `, [
-      aggregate.symbol,
-      aggregate.timestamp,
-      aggregate.open,
-      aggregate.high,
-      aggregate.low,
-      aggregate.close,
-      aggregate.volume,
-      aggregate.vwap,
-      aggregate.transaction_count
-    ]);
+    try {
+      await db.query(
+        `
+        INSERT INTO stock_aggregates (symbol, timestamp, open, high, low, close, volume, vwap, transaction_count)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `,
+        [
+          aggregate.symbol,
+          aggregate.timestamp,
+          aggregate.open,
+          aggregate.high,
+          aggregate.low,
+          aggregate.close,
+          aggregate.volume,
+          aggregate.vwap,
+          aggregate.transaction_count,
+        ]
+      );
+    } catch (error) {
+      // Ignore unique constraint violations (duplicates)
+      if (error instanceof Error && error.message.includes('duplicate')) {
+        console.log(`Skipping duplicate stock aggregate: ${aggregate.symbol} at ${aggregate.timestamp}`);
+        return;
+      }
+      throw error;
+    }
   }
 
   private async insertAggregates(ticker: string, aggregates: PolygonAggregate[]): Promise<void> {

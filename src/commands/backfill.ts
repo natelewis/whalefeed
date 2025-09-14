@@ -11,6 +11,23 @@ function parseDate(dateStr: string): Date {
   return date;
 }
 
+function formatDuration(milliseconds: number): string {
+  const seconds = Math.floor(milliseconds / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+
+  if (hours > 0) {
+    const remainingMinutes = minutes % 60;
+    const remainingSeconds = seconds % 60;
+    return `${hours}h ${remainingMinutes}m ${remainingSeconds}s`;
+  } else if (minutes > 0) {
+    const remainingSeconds = seconds % 60;
+    return `${minutes}m ${remainingSeconds}s`;
+  } else {
+    return `${seconds}s`;
+  }
+}
+
 function showUsage() {
   console.log(chalk.blue('Usage:'));
   console.log('  npm run backfill                    # Backfill all tickers from last sync');
@@ -91,6 +108,7 @@ async function main() {
   }
 
   const backfillService = new BackfillService();
+  const startTime = Date.now();
 
   try {
     if (ticker && startDate) {
@@ -103,9 +121,19 @@ async function main() {
       await backfillService.backfillAll();
     }
 
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    const durationFormatted = formatDuration(duration);
+
     console.log(chalk.green('Backfill completed successfully'));
+    console.log(chalk.blue(`Total execution time: ${durationFormatted}`));
   } catch (error) {
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    const durationFormatted = formatDuration(duration);
+
     console.error(chalk.red('Backfill failed:'), error);
+    console.log(chalk.blue(`Execution time before failure: ${durationFormatted}`));
     process.exit(1);
   }
 }

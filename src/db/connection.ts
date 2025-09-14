@@ -91,7 +91,14 @@ export class QuestDBConnection {
   }
 
   async resetAllData(): Promise<void> {
-    const tables = ['stock_trades', 'stock_aggregates', 'option_contracts', 'option_trades', 'sync_state'];
+    const tables = [
+      'stock_trades',
+      'stock_aggregates',
+      'option_contracts',
+      'option_trades',
+      'option_quotes',
+      'sync_state',
+    ];
     
     for (const table of tables) {
       await this.query(`DROP TABLE IF EXISTS ${table}`);

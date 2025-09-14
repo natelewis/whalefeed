@@ -5,6 +5,7 @@ import { PolygonWebSocketMessage, PolygonWebSocketSubscription } from '../types/
 export interface WebSocketEventHandler {
   onTrade: (trade: unknown, symbol: string) => void;
   onQuote: (quote: unknown, symbol: string) => void;
+  onOptionQuote: (quote: unknown, symbol: string) => void;
   onAggregate: (aggregate: unknown, symbol: string) => void;
   onError: (error: Error) => void;
   onConnect: () => void;
@@ -38,7 +39,7 @@ export class PolygonWebSocketClient {
 
     return new Promise((resolve, reject) => {
       const wsUrl = `${config.polygon.wsUrl}?apikey=${config.polygon.apiKey}`;
-      
+
       this.ws = new WebSocket(wsUrl);
 
       this.ws.on('open', () => {
@@ -101,7 +102,12 @@ export class PolygonWebSocketClient {
         if (message.results && Array.isArray(message.results)) {
           message.results.forEach(quote => {
             const symbol = this.extractSymbolFromQuote(quote);
-            this.eventHandlers.onQuote?.(quote, symbol);
+            // Check if this is an option quote by looking at the symbol pattern
+            if (this.isOptionSymbol(symbol)) {
+              this.eventHandlers.onOptionQuote?.(quote, symbol);
+            } else {
+              this.eventHandlers.onQuote?.(quote, symbol);
+            }
           });
         }
         break;
@@ -132,6 +138,12 @@ export class PolygonWebSocketClient {
     this.subscribe(params);
   }
 
+  subscribeToOptionQuotes(symbols: string[]): void {
+    const params = symbols.map(symbol => `Q.${symbol}`).join(',');
+    symbols.forEach(symbol => this.subscriptionMap.set(`Q.${symbol}`, symbol));
+    this.subscribe(params);
+  }
+
   subscribeToAggregates(symbols: string[]): void {
     const params = symbols.map(symbol => `A.${symbol}`).join(',');
     symbols.forEach(symbol => this.subscriptionMap.set(`A.${symbol}`, symbol));
@@ -147,7 +159,7 @@ export class PolygonWebSocketClient {
 
     const message: PolygonWebSocketSubscription = {
       action: 'subscribe',
-      params
+      params,
     };
 
     this.ws.send(JSON.stringify(message));
@@ -159,7 +171,7 @@ export class PolygonWebSocketClient {
     for (const subscription of this.subscriptions) {
       const message: PolygonWebSocketSubscription = {
         action: 'subscribe',
-        params: subscription
+        params: subscription,
       };
       this.ws?.send(JSON.stringify(message));
     }
@@ -173,9 +185,11 @@ export class PolygonWebSocketClient {
 
     this.reconnectAttempts++;
     const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
-    
-    console.log(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-    
+
+    console.log(
+      `Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+    );
+
     setTimeout(() => {
       this.connect().catch(error => {
         console.error('Reconnection failed:', error);
@@ -209,5 +223,11 @@ export class PolygonWebSocketClient {
   private extractSymbolFromAggregate(_aggregate: unknown): string {
     // Polygon aggregate data doesn't include symbol, so we need to track it from subscriptions
     return 'UNKNOWN';
+  }
+
+  private isOptionSymbol(symbol: string): boolean {
+    // Option symbols typically have a pattern like: AAPL240315C00150000
+    // They contain letters, numbers, and often end with C or P followed by strike price
+    return /^[A-Z]+\d{6}[CP]\d+$/.test(symbol);
   }
 }

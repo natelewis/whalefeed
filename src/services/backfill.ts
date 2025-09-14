@@ -1,18 +1,39 @@
 import { db } from '../db/connection';
 import { PolygonClient } from './polygon-client';
+import { OptionIngestionService } from './option-ingestion';
 import { config } from '../config';
 import { StockAggregate, SyncState } from '../types/database';
 import { PolygonAggregate } from '../types/polygon';
 
 export class BackfillService {
   private polygonClient: PolygonClient;
+  private optionIngestionService: OptionIngestionService;
 
   constructor() {
     this.polygonClient = new PolygonClient();
+    this.optionIngestionService = new OptionIngestionService();
+  }
+
+  private formatDuration(milliseconds: number): string {
+    const seconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+
+    if (hours > 0) {
+      const remainingMinutes = minutes % 60;
+      const remainingSeconds = seconds % 60;
+      return `${hours}h ${remainingMinutes}m ${remainingSeconds}s`;
+    } else if (minutes > 0) {
+      const remainingSeconds = seconds % 60;
+      return `${minutes}m ${remainingSeconds}s`;
+    } else {
+      return `${seconds}s`;
+    }
   }
 
   async backfillAll(): Promise<void> {
     console.log('Starting backfill for all tickers...');
+    const startTime = Date.now();
 
     try {
       await db.connect();
@@ -32,10 +53,16 @@ export class BackfillService {
 
       console.log(`Backfilling from ${backfillStart.toISOString()} to ${backfillEnd.toISOString()}`);
 
+      let totalItemsProcessed = 0;
+
       // Backfill each ticker
       for (const ticker of config.tickers) {
         try {
-          await this.backfillTickerData(ticker, backfillStart, backfillEnd);
+          const tickerStartTime = Date.now();
+          const itemsProcessed = await this.backfillTickerData(ticker, backfillStart, backfillEnd);
+          const tickerDuration = Date.now() - tickerStartTime;
+          totalItemsProcessed += itemsProcessed;
+          console.log(`Completed ${ticker} in ${this.formatDuration(tickerDuration)} - ${itemsProcessed} items`);
         } catch (error) {
           console.error(`Error backfilling ${ticker}:`, error);
         }
@@ -49,13 +76,26 @@ export class BackfillService {
 
       for (const ticker of config.tickers) {
         try {
-          await this.backfillTickerData(ticker, additionalWeekStart, additionalWeekEnd);
+          const tickerStartTime = Date.now();
+          const itemsProcessed = await this.backfillTickerData(ticker, additionalWeekStart, additionalWeekEnd);
+          const tickerDuration = Date.now() - tickerStartTime;
+          totalItemsProcessed += itemsProcessed;
+          console.log(
+            `Completed additional week for ${ticker} in ${this.formatDuration(
+              tickerDuration
+            )} - ${itemsProcessed} items`
+          );
         } catch (error) {
           console.error(`Error backfilling additional week for ${ticker}:`, error);
         }
       }
 
-      console.log('Backfill completed for all tickers');
+      const totalDuration = Date.now() - startTime;
+      console.log(
+        `Backfill completed for all tickers in ${this.formatDuration(
+          totalDuration
+        )} - Total items processed: ${totalItemsProcessed}`
+      );
     } catch (error) {
       console.error('Backfill failed:', error);
       throw error;
@@ -66,6 +106,7 @@ export class BackfillService {
 
   async backfillTicker(ticker: string): Promise<void> {
     console.log(`Starting backfill for ticker: ${ticker}`);
+    const startTime = Date.now();
 
     try {
       await db.connect();
@@ -76,9 +117,12 @@ export class BackfillService {
       const backfillStart = syncState.last_aggregate_timestamp || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 7 days ago if no data
       const backfillEnd = new Date();
 
-      await this.backfillTickerData(ticker, backfillStart, backfillEnd);
+      const itemsProcessed = await this.backfillTickerData(ticker, backfillStart, backfillEnd);
 
-      console.log(`Backfill completed for ${ticker}`);
+      const duration = Date.now() - startTime;
+      console.log(
+        `Backfill completed for ${ticker} in ${this.formatDuration(duration)} - ${itemsProcessed} items processed`
+      );
     } catch (error) {
       console.error(`Backfill failed for ${ticker}:`, error);
       throw error;
@@ -93,6 +137,7 @@ export class BackfillService {
         skipReplace ? ' (skipping data replacement)' : ' (replacing existing data)'
       }`
     );
+    const startTime = Date.now();
 
     try {
       await db.connect();
@@ -116,9 +161,16 @@ export class BackfillService {
         console.log(`Deleted existing data for ${ticker} from ${startDate.toISOString().split('T')[0]}`);
       }
 
-      await this.backfillTickerData(ticker, startDate, backfillEnd);
+      const itemsProcessed = await this.backfillTickerData(ticker, startDate, backfillEnd);
 
-      console.log(`Backfill completed for ${ticker}`);
+      // Also backfill option contracts and trades for this ticker
+      console.log(`Backfilling option data for ${ticker}...`);
+      await this.optionIngestionService.backfillOptionData(ticker, startDate, backfillEnd);
+
+      const duration = Date.now() - startTime;
+      console.log(
+        `Backfill completed for ${ticker} in ${this.formatDuration(duration)} - ${itemsProcessed} items processed`
+      );
     } catch (error) {
       console.error(`Backfill failed for ${ticker}:`, error);
       throw error;
@@ -131,6 +183,7 @@ export class BackfillService {
     console.log(
       `Starting backfill for all tickers from ${startDate.toISOString().split('T')[0]} (replacing existing data)`
     );
+    const startTime = Date.now();
 
     try {
       await db.connect();
@@ -148,6 +201,8 @@ export class BackfillService {
         );
       }
 
+      let totalItemsProcessed = 0;
+
       // Backfill each ticker with data replacement
       for (const ticker of config.tickers) {
         try {
@@ -156,13 +211,23 @@ export class BackfillService {
           console.log(`Deleted existing data for ${ticker} from ${startDate.toISOString().split('T')[0]}`);
 
           // Backfill the data
-          await this.backfillTickerData(ticker, startDate, backfillEnd);
+          const itemsProcessed = await this.backfillTickerData(ticker, startDate, backfillEnd);
+          totalItemsProcessed += itemsProcessed;
+
+          // Also backfill option contracts and trades for this ticker
+          console.log(`Backfilling option data for ${ticker}...`);
+          await this.optionIngestionService.backfillOptionData(ticker, startDate, backfillEnd);
         } catch (error) {
           console.error(`Error backfilling ${ticker}:`, error);
         }
       }
 
-      console.log('Backfill completed for all tickers');
+      const totalDuration = Date.now() - startTime;
+      console.log(
+        `Backfill completed for all tickers in ${this.formatDuration(
+          totalDuration
+        )} - Total items processed: ${totalItemsProcessed}`
+      );
     } catch (error) {
       console.error('Backfill failed:', error);
       throw error;
@@ -171,11 +236,12 @@ export class BackfillService {
     }
   }
 
-  private async backfillTickerData(ticker: string, startDate: Date, endDate: Date): Promise<void> {
+  private async backfillTickerData(ticker: string, startDate: Date, endDate: Date): Promise<number> {
     console.log(`Backfilling ${ticker} from ${startDate.toISOString()} to ${endDate.toISOString()}`);
 
     let currentStart = new Date(startDate);
     const batchSize = 7; // Process 7 days at a time to avoid API limits
+    let totalItemsProcessed = 0;
 
     while (currentStart < endDate) {
       const currentEnd = new Date(
@@ -188,11 +254,12 @@ export class BackfillService {
           currentStart,
           currentEnd,
           'minute',
-          5
+          1
         );
 
         if (aggregates.length > 0) {
           await this.insertAggregates(ticker, aggregates);
+          totalItemsProcessed += aggregates.length;
           console.log(
             `Inserted ${
               aggregates.length
@@ -215,6 +282,8 @@ export class BackfillService {
       // Small delay to avoid rate limiting
       await new Promise(resolve => setTimeout(resolve, 100));
     }
+
+    return totalItemsProcessed;
   }
 
   private async getSyncStates(): Promise<Map<string, SyncState>> {
@@ -307,23 +376,32 @@ export class BackfillService {
         transaction_count: aggregate.n,
       };
 
-      await db.query(
-        `
-        INSERT INTO stock_aggregates (symbol, timestamp, open, high, low, close, volume, vwap, transaction_count)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      `,
-        [
-          stockAggregate.symbol,
-          stockAggregate.timestamp,
-          stockAggregate.open,
-          stockAggregate.high,
-          stockAggregate.low,
-          stockAggregate.close,
-          stockAggregate.volume,
-          stockAggregate.vwap,
-          stockAggregate.transaction_count,
-        ]
-      );
+      try {
+        await db.query(
+          `
+          INSERT INTO stock_aggregates (symbol, timestamp, open, high, low, close, volume, vwap, transaction_count)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `,
+          [
+            stockAggregate.symbol,
+            stockAggregate.timestamp,
+            stockAggregate.open,
+            stockAggregate.high,
+            stockAggregate.low,
+            stockAggregate.close,
+            stockAggregate.volume,
+            stockAggregate.vwap,
+            stockAggregate.transaction_count,
+          ]
+        );
+      } catch (error) {
+        // Ignore unique constraint violations (duplicates)
+        if (error instanceof Error && error.message.includes('duplicate')) {
+          console.log(`Skipping duplicate stock aggregate: ${stockAggregate.symbol} at ${stockAggregate.timestamp}`);
+          continue;
+        }
+        throw error;
+      }
     }
   }
 
@@ -358,8 +436,28 @@ export class BackfillService {
         `SELECT COUNT(*) as count FROM stock_trades WHERE symbol = '${ticker}' AND timestamp >= '${startDate.toISOString()}' AND timestamp <= '${endDate.toISOString()}'`
       );
 
+      // Check for option contracts, trades, and quotes
+      const optionContractsCheck = await db.query(
+        `SELECT COUNT(*) as count FROM option_contracts WHERE underlying_ticker = '${ticker}' AND created_at >= '${startDate.toISOString()}' AND created_at <= '${endDate.toISOString()}'`
+      );
+
+      const optionTradesCheck = await db.query(
+        `SELECT COUNT(*) as count FROM option_trades WHERE ticker IN (
+          SELECT ticker FROM option_contracts WHERE underlying_ticker = '${ticker}'
+        ) AND timestamp >= '${startDate.toISOString()}' AND timestamp <= '${endDate.toISOString()}'`
+      );
+
+      const optionQuotesCheck = await db.query(
+        `SELECT COUNT(*) as count FROM option_quotes WHERE ticker IN (
+          SELECT ticker FROM option_contracts WHERE underlying_ticker = '${ticker}'
+        ) AND timestamp >= '${startDate.toISOString()}' AND timestamp <= '${endDate.toISOString()}'`
+      );
+
       const aggregatesCount = (aggregatesCheck as any)?.dataset?.[0]?.[0] || 0;
       const tradesCount = (tradesCheck as any)?.dataset?.[0]?.[0] || 0;
+      const optionContractsCount = (optionContractsCheck as any)?.dataset?.[0]?.[0] || 0;
+      const optionTradesCount = (optionTradesCheck as any)?.dataset?.[0]?.[0] || 0;
+      const optionQuotesCount = (optionQuotesCheck as any)?.dataset?.[0]?.[0] || 0;
 
       if (aggregatesCount > 0) {
         console.log(`Found ${aggregatesCount} stock aggregates to delete for ${ticker}`);
@@ -374,7 +472,28 @@ export class BackfillService {
         console.log(`Skipping deletion of stock trades (QuestDB limitation)`);
       }
 
-      if (aggregatesCount === 0 && tradesCount === 0) {
+      if (optionContractsCount > 0) {
+        console.log(`Found ${optionContractsCount} option contracts to delete for ${ticker}`);
+        console.log(`Skipping deletion of option contracts (QuestDB limitation)`);
+      }
+
+      if (optionTradesCount > 0) {
+        console.log(`Found ${optionTradesCount} option trades to delete for ${ticker}`);
+        console.log(`Skipping deletion of option trades (QuestDB limitation)`);
+      }
+
+      if (optionQuotesCount > 0) {
+        console.log(`Found ${optionQuotesCount} option quotes to delete for ${ticker}`);
+        console.log(`Skipping deletion of option quotes (QuestDB limitation)`);
+      }
+
+      if (
+        aggregatesCount === 0 &&
+        tradesCount === 0 &&
+        optionContractsCount === 0 &&
+        optionTradesCount === 0 &&
+        optionQuotesCount === 0
+      ) {
         console.log(`No existing data found for ${ticker} in the specified date range`);
       }
     } catch (error) {

@@ -45,6 +45,19 @@ export interface OptionTrade {
   received_at: Date; // When we received this from websocket
 }
 
+export interface OptionQuote {
+  ticker: string;
+  timestamp: Date;
+  bid_price: number;
+  bid_size: number;
+  ask_price: number;
+  ask_size: number;
+  bid_exchange: number;
+  ask_exchange: number;
+  sequence_number: number;
+  received_at: Date; // When we received this from websocket
+}
+
 export interface TickerConfig {
   symbol: string;
   enabled: boolean;

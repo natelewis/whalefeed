@@ -9,10 +9,11 @@ CREATE TABLE IF NOT EXISTS stock_trades (
     conditions STRING,
     exchange LONG,
     tape LONG,
-    trade_id STRING
+    trade_id STRING,
+    UNIQUE(symbol, timestamp, price, size, trade_id)
 ) TIMESTAMP(timestamp) PARTITION BY DAY;
 
--- Stock aggregates (5-minute bars)
+-- Stock aggregates (1-minute bars)
 CREATE TABLE IF NOT EXISTS stock_aggregates (
     symbol SYMBOL,
     timestamp TIMESTAMP,
@@ -22,7 +23,8 @@ CREATE TABLE IF NOT EXISTS stock_aggregates (
     close DOUBLE,
     volume DOUBLE,
     vwap DOUBLE,
-    transaction_count LONG
+    transaction_count LONG,
+    UNIQUE(symbol, timestamp)
 ) TIMESTAMP(timestamp) PARTITION BY DAY;
 
 -- Option contracts
@@ -34,7 +36,8 @@ CREATE TABLE IF NOT EXISTS option_contracts (
     shares_per_contract LONG,
     strike_price DOUBLE,
     underlying_ticker SYMBOL,
-    created_at TIMESTAMP
+    created_at TIMESTAMP,
+    UNIQUE(ticker)
 ) TIMESTAMP(created_at) PARTITION BY DAY;
 
 -- Option trades
@@ -47,7 +50,23 @@ CREATE TABLE IF NOT EXISTS option_trades (
     exchange LONG,
     tape LONG,
     sequence_number LONG,
-    received_at TIMESTAMP
+    received_at TIMESTAMP,
+    UNIQUE(ticker, timestamp, sequence_number)
+) TIMESTAMP(timestamp) PARTITION BY DAY;
+
+-- Option quotes
+CREATE TABLE IF NOT EXISTS option_quotes (
+    ticker SYMBOL,
+    timestamp TIMESTAMP,
+    bid_price DOUBLE,
+    bid_size DOUBLE,
+    ask_price DOUBLE,
+    ask_size DOUBLE,
+    bid_exchange LONG,
+    ask_exchange LONG,
+    sequence_number LONG,
+    received_at TIMESTAMP,
+    UNIQUE(ticker, timestamp, sequence_number)
 ) TIMESTAMP(timestamp) PARTITION BY DAY;
 
 -- Sync state tracking
@@ -56,5 +75,6 @@ CREATE TABLE IF NOT EXISTS sync_state (
     last_trade_timestamp TIMESTAMP,
     last_aggregate_timestamp TIMESTAMP,
     last_sync TIMESTAMP,
-    is_streaming BOOLEAN
+    is_streaming BOOLEAN,
+    UNIQUE(ticker)
 ) TIMESTAMP(last_sync) PARTITION BY DAY;

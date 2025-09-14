@@ -41,6 +41,13 @@ export interface PolygonOptionContract {
   underlying_ticker: string;
 }
 
+export interface PolygonOptionContractsResponse {
+  results: PolygonOptionContract[];
+  status: string;
+  request_id: string;
+  next_url?: string;
+}
+
 export interface PolygonOptionTrade {
   conditions: number[];
   exchange: number;
@@ -50,6 +57,24 @@ export interface PolygonOptionTrade {
   participant_timestamp: number; // nanoseconds
   sequence_number: number;
   tape: number;
+}
+
+export interface PolygonOptionQuote {
+  ask_exchange: number;
+  ask_price: number;
+  ask_size: number;
+  bid_exchange: number;
+  bid_price: number;
+  bid_size: number;
+  sequence_number: number;
+  sip_timestamp: number; // nanoseconds
+}
+
+export interface PolygonOptionQuotesResponse {
+  results: PolygonOptionQuote[];
+  status: string;
+  request_id: string;
+  next_url?: string;
 }
 
 export interface PolygonWebSocketMessage {
